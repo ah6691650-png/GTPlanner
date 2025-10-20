@@ -310,6 +310,55 @@ JINA_API_KEY="your-jina-key"  # For web search functionality
 * **Language**: `language` can be set to `zh | en | ja | es | fr`, or let the system auto-detect.
 * **Compatibility**: Supports OpenAI, Azure OpenAI, Anthropic Claude (via proxy), and major domestic model service providers.
 
+## External Services Configuration
+
+### Retrieval Tool (Vector Service)
+
+GTPlanner's tool indexing and recommendation features depend on an external vector service. If it is not configured or unavailable, indexing/recommendation will be skipped or fail.
+
+- Required environment variables:
+  ```bash
+  # Required for tool indexing and recommendation
+  export VECTOR_SERVICE_BASE_URL="http://localhost:8080"
+
+  # Optional (defaults shown)
+  export VECTOR_SERVICE_TIMEOUT="30"                    # seconds
+  export VECTOR_SERVICE_INDEX_NAME="document_gtplanner_tools"  # must start with 'document_'
+  export VECTOR_SERVICE_VECTOR_FIELD="combined_text"
+  ```
+- Expected HTTP API contract implemented by your vector service:
+  - `GET /health` → 200 means healthy
+  - `DELETE /index/{index_name}/clear` → clear all documents in an index
+  - `POST /documents` with body `{ documents: [...], vector_field: "combined_text", index: "document_gtplanner_tools" }` → returns `{ count, index }`
+  - `POST /search` with body `{ query, vector_field, index, top_k }` → returns `{ total, results: [{ score, document: {...} }] }`
+- Quick verification and index management:
+  ```bash
+  # Initialize and build the tools index from ./tools/*.yml
+  uv run python manage_tool_index.py init
+
+  # Check status
+  uv run python manage_tool_index.py status
+
+  # Rebuild index (force)
+  uv run python manage_tool_index.py force-refresh
+  ```
+- Notes:
+  - Tool specs under the `tools/` directory are parsed and concatenated into the `combined_text` field for embedding.
+  - If you see errors like "Vector service URL not configured" or "Vector service is not available", check the environment variables and that `$VECTOR_SERVICE_BASE_URL/health` returns 200.
+
+### Langfuse Tracing (Optional)
+
+For execution tracing via PocketFlow Tracing and Langfuse:
+
+- Environment variables:
+  ```bash
+  export LANGFUSE_SECRET_KEY="sk-lf-..."
+  export LANGFUSE_PUBLIC_KEY="pk-lf-..."
+  export LANGFUSE_HOST="https://cloud.langfuse.com"
+  ```
+- When these are set, traces from key flows (planning, research, orchestration) will be sent to Langfuse. If unset, tracing is skipped safely.
+- See more details in `agent/tracing_guide.md`. We are considering offering OpenTelemetry as an alternative in the future.
+
 ---
 
 ## ✨ Features
