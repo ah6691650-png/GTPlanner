@@ -319,6 +319,55 @@ JINA_API_KEY="your-jina-key"  # 用于网络搜索功能
 * **语言**：`language` 可设 `zh | en | ja | es | fr`，或直接让系统自动检测。
 * **兼容性**：支持 OpenAI、Azure OpenAI、Anthropic Claude（通过代理）、国内各大模型服务商。
 
+## 外部服务配置说明
+
+### 检索工具（向量服务）
+
+工具索引与工具推荐能力依赖一个外部的“向量服务”。如未配置或不可用，索引/推荐将被跳过或失败。
+
+- 环境变量：
+  ```bash
+  # 工具索引/推荐 所需（必填）
+  export VECTOR_SERVICE_BASE_URL="http://localhost:8080"
+
+  # 可选（以下为默认值）
+  export VECTOR_SERVICE_TIMEOUT="30"                        # 请求超时时间（秒）
+  export VECTOR_SERVICE_INDEX_NAME="document_gtplanner_tools"  # 部分向量服务要求以 document_ 开头
+  export VECTOR_SERVICE_VECTOR_FIELD="combined_text"
+  ```
+- 接口约定（向量服务需实现）：
+  - `GET /health` → 200 代表服务可用
+  - `DELETE /index/{index_name}/clear` → 清空指定索引
+  - `POST /documents`，请求体 `{ documents: [...], vector_field: "combined_text", index: "document_gtplanner_tools" }` → 返回 `{ count, index }`
+  - `POST /search`，请求体 `{ query, vector_field, index, top_k }` → 返回 `{ total, results: [{ score, document: {...} }] }`
+- 快速校验与索引管理：
+  ```bash
+  # 从 ./tools/*.yml 构建/预热工具索引
+  uv run python manage_tool_index.py init
+
+  # 查看状态
+  uv run python manage_tool_index.py status
+
+  # 强制重建索引
+  uv run python manage_tool_index.py force-refresh
+  ```
+- 说明：
+  - `tools/` 目录下的 YAML 会被解析并拼接为 `combined_text` 字段用于向量化
+  - 如出现“向量服务URL未配置，请设置VECTOR_SERVICE_BASE_URL环境变量”或“向量服务不可用”等报错，请检查环境变量以及 `$VECTOR_SERVICE_BASE_URL/health` 是否返回 200
+
+### Langfuse 追踪（可选）
+
+用于通过 PocketFlow Tracing 将执行轨迹上报到 Langfuse：
+
+- 环境变量：
+  ```bash
+  export LANGFUSE_SECRET_KEY="sk-lf-..."
+  export LANGFUSE_PUBLIC_KEY="pk-lf-..."
+  export LANGFUSE_HOST="https://cloud.langfuse.com"
+  ```
+- 设置以上变量后，规划/调研/编排等关键流程的 Trace 将上报至 Langfuse；未设置时会自动跳过。
+- 详细说明见 `agent/tracing_guide.md`。后续我们将考虑提供 OpenTelemetry 作为替代方案。
+
 ---
 
 ## ✨ 功能特性
